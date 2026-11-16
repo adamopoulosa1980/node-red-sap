@@ -218,7 +218,8 @@ test('openSocket: connection refused, timeout, IP and host names for TLS proxies
 
   const accepted = [];
   const silent = net.createServer((s) => accepted.push(s)); // accepts TCP but never speaks TLS
-  await new Promise((r) => silent.listen(0, 'localhost', r));
+  // all addresses (dual stack): "localhost" may resolve to ::1 or 127.0.0.1 depending on the platform
+  await new Promise((r) => silent.listen(0, r));
   try {
     await assert.rejects(openSocket({ url: new URL(`https://localhost:${silent.address().port}`) }, 100, { rejectUnauthorized: false }), /timed out after 100 ms/);
   } finally {

@@ -57,7 +57,8 @@ const challenge = () => `NTLM ${ntlmType2(crypto.randomBytes(8))}`;
 test('NTLM handshake: head split in chunks, repeated Proxy-Authenticate, header without colon, body after a pause, bytes after 200', async () => {
   const p = await scripted([
     ['HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="x"\r\n', 20, `Proxy-Authenticate: ${challenge()}\r\nX-Junk\r\nContent-Length: 4\r\n\r\n`, 20, 'BO', 20, 'DY'],
-    ['HTTP/1.1 200 Connection Established\r\n\r\n', 'LEFTOVER'],
+    // one write, so the bytes after the 200 arrive with it on every platform and must be given back to the socket
+    ['HTTP/1.1 200 Connection Established\r\n\r\nLEFTOVER'],
   ]);
   try {
     const socket = await ntlmConnect(p.proxy(), { mode: 'connect', host: 'sap.example', port: 443 }, 2000, {});
