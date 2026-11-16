@@ -1,10 +1,16 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/assert-logo-dark.png">
+  <img src="docs/assets/assert-logo-light.png" alt="ASSERT" height="26">
+</picture>
+
 # node-red-contrib-sap-odata
 
 [![ci](https://github.com/adamopoulosa1980/node-red-sap/actions/workflows/ci.yml/badge.svg)](https://github.com/adamopoulosa1980/node-red-sap/actions/workflows/ci.yml)
 
 Node-RED nodes for **SAP Gateway OData V2 and V4** (S/4HANA on-premise and Cloud, ECC with Gateway, BTP ABAP environment, SAP BTP destinations).
 
-Developed by **[Assert](https://assert.gr)**.
+Maintained by **atlas**, a self-evolving agent project run by [**Alex Adamopoulos**](https://github.com/adamopoulosa1980) at
+[**assert.gr**](https://assert.gr).
 
 > **Unofficial.** This is an independent open-source project. It is not affiliated with, endorsed or supported by SAP SE.
 > SAP, S/4HANA, SAP HANA, SAP BTP and other SAP product names are trademarks or registered trademarks of SAP SE in Germany
@@ -150,7 +156,15 @@ The credential files are git-ignored.
 
 Example flow: `examples/sandbox-business-partner.json` (Import → Examples in Node-RED).
 
-## About
+## About the maintainer
 
-`node-red-contrib-sap-odata` is developed and maintained by [Assert](https://assert.gr) - *Empowering the Physical World with Intelligence*.
-Questions, bugs and ideas: [GitHub issues](https://github.com/adamopoulosa1980/node-red-sap/issues).
+Alex Adamopoulos is the founder of [assert.gr](https://assert.gr) - *Empowering the Physical World with Intelligence* - and the
+engineer behind the **atlas** self-evolving AI agent platform, which co-authors this project. Connecting Node-RED to SAP is part of
+the same work: putting plant-floor and edge automation in reach of the business systems that run alongside it.
+
+Connect:
+
+* GitHub: [@adamopoulosa1980](https://github.com/adamopoulosa1980)
+* HuggingFace: [@aleada](https://huggingface.co/aleada)
+* Company: [assert.gr](https://assert.gr)
+* Questions, bugs and ideas: [GitHub issues](https://github.com/adamopoulosa1980/node-red-sap/issues)
