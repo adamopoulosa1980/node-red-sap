@@ -93,8 +93,15 @@ jobs:
       - name: Report a person can read
         run: |
           sudo apt-get install -y --no-install-recommends lcov > /dev/null
+          genhtml --version
+          # lcov 2.x refuses two functions with one name in a file ("inconsistent"); node's lcov names arrow
+          # functions after the property they are assigned to, so two `createConnection: () => ...` in
+          # lib/http.js are legitimate. lcov 1.x does not know the category and needs no option.
+          extra=()
+          case "$(genhtml --version | grep -oE '[0-9]+\.[0-9]+' | head -1)" in 1.*) ;; *) extra=(--ignore-errors inconsistent) ;; esac
           genhtml coverage/lcov.info --output-directory coverage-html --title node-red-sap \
-            --branch-coverage --function-coverage --quiet
+            --branch-coverage --function-coverage --quiet "${extra[@]}"
+          test -f coverage-html/index.html
       - name: Publish the HTML report (open index.html)
         uses: actions/upload-artifact@v7
         with:
