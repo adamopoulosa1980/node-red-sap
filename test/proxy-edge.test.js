@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const net = require('node:net');
 const crypto = require('node:crypto');
-const { ntlmConnect, resolveProxy, splitUser, httpsProxyAgent } = require('../lib/proxy');
+const { EventEmitter } = require('node:events');
+const { ntlmConnect, resolveProxy, splitUser, httpsProxyAgent, reader } = require('../lib/proxy');
 const { send } = require('../lib/http');
 const { ntlmType2 } = require('./helpers/mock-proxy');
 
@@ -170,4 +171,20 @@ test('NTLM: a proxy that answers before reading the request', async () => {
   } finally {
     await p.close();
   }
+});
+
+test('reader: a socket error rejects a pending read (independent of how a platform reports a reset)', async () => {
+  const socket = new EventEmitter();
+  const rd = reader(socket);
+  const head = rd.head();
+  socket.emit('error', new Error('ECONNRESET from the network'));
+  await assert.rejects(head, /ECONNRESET from the network/);
+
+  const socket2 = new EventEmitter();
+  const rd2 = reader(socket2);
+  socket2.emit('data', Buffer.from('HTTP/1.1 407 x\r\nContent-Length: 10\r\n\r\nabc'));
+  assert.equal((await rd2.head()).status, 407);
+  const rest = rd2.skip(10);
+  socket2.emit('error', new Error('reset in the body'));
+  await assert.rejects(rest, /reset in the body/);
 });
