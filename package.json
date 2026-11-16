@@ -14,6 +14,10 @@
     "kerberos",
     "oauth2"
   ],
+  "author": {
+    "name": "Alex Adamopoulos",
+    "url": "https://assert.gr"
+  },
   "license": "MIT",
   "main": "lib/client.js",
   "files": [

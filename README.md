@@ -4,6 +4,8 @@
 
 Node-RED nodes for **SAP Gateway OData V2 and V4** (S/4HANA on-premise and Cloud, ECC with Gateway, BTP ABAP environment, SAP BTP destinations).
 
+Developed by **[Assert](https://assert.gr)**.
+
 > **Unofficial.** This is an independent open-source project. It is not affiliated with, endorsed or supported by SAP SE.
 > SAP, S/4HANA, SAP HANA, SAP BTP and other SAP product names are trademarks or registered trademarks of SAP SE in Germany
 > and other countries; they are used here only to say which systems the nodes work with.
@@ -147,3 +149,8 @@ The credential files are git-ignored.
 - NTLM is supported for proxies (SAP's ICM does not offer NTLM)
 
 Example flow: `examples/sandbox-business-partner.json` (Import → Examples in Node-RED).
+
+## About
+
+`node-red-contrib-sap-odata` is developed and maintained by [Assert](https://assert.gr) - *Empowering the Physical World with Intelligence*.
+Questions, bugs and ideas: [GitHub issues](https://github.com/adamopoulosa1980/node-red-sap/issues).
