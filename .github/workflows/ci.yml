@@ -1,4 +1,5 @@
-# ci: the unit and Node-RED runtime tests on every supported Node.js line, then one coverage report.
+# ci: the unit and Node-RED runtime tests on every supported Node.js line with Node-RED 4 and 5, then one
+# coverage report.
 #
 # Laid out like atlas's ci.yml: one leg of the test matrix collects coverage and publishes it as an
 # artifact; the `coverage` job READS what was measured instead of running the suite again, writes the
@@ -29,19 +30,22 @@ concurrency:
 
 jobs:
   test:
-    name: test (Node ${{ matrix.node }})
+    name: test (Node ${{ matrix.node }}, Node-RED ${{ matrix.node-red }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
-      # every supported line reports, not only the first one to fail
+      # every combination reports, not only the first one to fail
       fail-fast: false
       matrix:
         # the LTS lines still supported (Node 20 reached end of life on 2026-04-30)
         node: [22, 24, 26]
+        # Node-RED 5 is the current line and the one in package-lock.json; 4 is still maintained
+        node-red: [4, 5]
         include:
-          # one leg collects coverage for the `coverage` job; measuring all three would report the same
-          # lines three times and triple the artifact for nothing
+          # one leg collects coverage for the `coverage` job; measuring every leg would report the same
+          # lines six times for nothing
           - node: 26
+            node-red: 5
             collect-coverage: 'yes'
     steps:
       - uses: actions/checkout@v7
@@ -51,6 +55,12 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      # package-lock.json pins Node-RED 5; the other line replaces it in node_modules only
+      - name: Node-RED ${{ matrix.node-red }}
+        if: matrix.node-red != 5
+        run: npm install --no-save "node-red@${{ matrix.node-red }}"
+      - name: Node-RED version under test
+        run: node -e "console.log('node-red', require('node-red/package.json').version)"
       - name: Tests with the 100 % coverage gate
         if: matrix.collect-coverage != 'yes'
         run: npm test

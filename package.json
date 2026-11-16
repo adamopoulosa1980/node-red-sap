@@ -26,7 +26,7 @@
     "node": ">=22"
   },
   "node-red": {
-    "version": ">=3.0.0",
+    "version": ">=4.0.0",
     "nodes": {
       "sap-connection": "nodes/sap-connection.js",
       "sap-odata": "nodes/sap-odata.js"
@@ -47,12 +47,12 @@
   },
   "devDependencies": {
     "@sap-cloud-sdk/connectivity": "^4.10.0",
-    "node-red": "^4.0.9",
+    "node-red": "^5.0.9",
     "node-red-node-test-helper": "^0.3.4"
   },
   "peerDependencies": {
-    "kerberos": ">=6",
-    "@sap-cloud-sdk/connectivity": ">=4"
+    "@sap-cloud-sdk/connectivity": ">=4",
+    "kerberos": ">=6"
   },
   "peerDependenciesMeta": {
     "kerberos": {
