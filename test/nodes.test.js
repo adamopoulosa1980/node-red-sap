@@ -393,8 +393,33 @@ test('function V4: unbound function, action import and bound action', async () =
   r = await send({ functionName: 'ResetAll', params: { Reason: 'x' } });
   assert.equal(r.msg.payload, null);
   assert.deepEqual(JSON.parse(lastOf('POST', /ResetAll/).body), { Reason: 'x' });
+  // a bound action is conditional: the ETag is read from the bound entity and sent as If-Match (SAP RAP requires it)
+  mock.on('GET', /Product\('P1'\)(\?|$)/, (req, res) => json(res, 200, { '@odata.etag': 'W/"7"', Product: 'P1' }));
   r = await send({ functionName: 'com.sap.gateway.srvd_a2x.api_product.v0001.Activate', bindingPath: "Product('P1')", params: { Force: true } });
   assert.deepEqual(r.msg.payload.body, { Force: true });
+  assert.equal(lastOf('POST', /Activate/).headers['if-match'], 'W/"7"');
+  // explicit ETag, and a bound function (GET) is never conditional
+  r = await send({ functionName: 'com.sap.gateway.srvd_a2x.api_product.v0001.Activate', bindingPath: "/Product('P1')", params: {}, etag: 'W/"9"' });
+  assert.equal(lastOf('POST', /Activate/).headers['if-match'], 'W/"9"');
+});
+
+test('function V4: RAP messages of the body (SAP__Messages) and the header (sap-messages) in msg.odata.messages', async () => {
+  mock.on('POST', /Product\('P1'\)\/.*Activate/, (req, res) =>
+    json(
+      res,
+      200,
+      { Product: 'P1', SAP__Messages: [{ code: 'ZMSG/001', message: 'Activated', numericSeverity: 1, target: 'Product', longtextUrl: 'u' }] },
+      { 'sap-messages': JSON.stringify([{ code: 'ZMSG/002', message: 'Check stock', numericSeverity: 3 }]) }
+    )
+  );
+  mock.on('GET', /Product\('P1'\)(\?|$)/, (req, res) => json(res, 200, { Product: 'P1' }));
+  const send = await setup({ service: V4SVC, operation: 'function', etag: 'none' });
+  const r = await send({ functionName: 'com.sap.gateway.srvd_a2x.api_product.v0001.Activate', bindingPath: "Product('P1')" });
+  assert.deepEqual(r.msg.odata.messages, [
+    { code: 'ZMSG/002', message: 'Check stock', severity: 'warning', target: undefined, longtextUrl: undefined },
+    { code: 'ZMSG/001', message: 'Activated', severity: 'success', target: 'Product', longtextUrl: 'u' },
+  ]);
+  assert.equal(lastOf('POST', /Activate/).headers['if-match'], undefined);
 });
 
 test('function: method override for operations unknown to $metadata', async () => {
@@ -531,4 +556,112 @@ test('status indicator on errors without HTTP status', async () => {
   const r = await send({});
   assert.match(r.error.message, /ECONNREFUSED/);
   assert.deepEqual(Object.keys(r.msg.error), ['message']);
+});
+
+// ---------------------------------------------------------------- proxy settings, files, binary, JSON batch
+
+test('sap-connection: proxy modes are passed to the client', async () => {
+  const flow = [
+    { id: 'm', type: 'sap-connection', url: 'https://h', proxyMode: 'manual', proxyUrl: 'http://p:3128', noProxy: 'localhost', proxyAuth: 'ntlm', proxyDomain: 'CORP', proxyWorkstation: 'WS', proxySpn: 'HTTP/p' },
+    { id: 'm2', type: 'sap-connection', url: 'https://h', proxyMode: 'manual', proxyUrl: 'http://p:3128' },
+    { id: 'e', type: 'sap-connection', url: 'https://h', proxyMode: 'env', proxyAuth: 'negotiate' },
+    { id: 'e2', type: 'sap-connection', url: 'https://h', proxyMode: 'env' },
+    { id: 'n', type: 'sap-connection', url: 'https://h' },
+    { id: 'd', type: 'sap-connection', authType: 'destination', destinationName: 'S4', grantType: 'saml2-bearer', clientAuth: 'body', spn: 'HTTP/sap' },
+  ];
+  await helper.load([connectionNode], flow, { m: { proxyUser: 'u', proxyPassword: 'p' } });
+  assert.deepEqual(helper.getNode('m').client.cfg.proxy, { url: 'http://p:3128', auth: 'ntlm', noProxy: 'localhost', domain: 'CORP', workstation: 'WS', spn: 'HTTP/p' });
+  assert.equal(helper.getNode('m').client.proxyFor('https://sap').user, 'u');
+  assert.deepEqual(helper.getNode('m2').client.cfg.proxy, { url: 'http://p:3128', auth: 'none', noProxy: undefined, domain: undefined, workstation: undefined, spn: undefined });
+  assert.deepEqual(helper.getNode('e').client.cfg.proxy, { useEnv: true, auth: 'negotiate', domain: undefined, workstation: undefined, spn: undefined });
+  assert.equal(helper.getNode('e2').client.cfg.proxy.auth, undefined);
+  assert.equal(helper.getNode('n').client.cfg.proxy, undefined);
+  const d = helper.getNode('d').client.cfg;
+  assert.deepEqual([d.authType, d.destinationName, d.grantType, d.clientAuth, d.spn], ['destination', 'S4', 'saml2-bearer', 'body', 'HTTP/sap']);
+});
+
+test('request: streaming upload from msg.uploadFile and download into msg.downloadFile', async () => {
+  const fsx = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fsx.mkdtempSync(path.join(os.tmpdir(), 'node-red-sap-'));
+  try {
+    const up = path.join(dir, 'in.bin');
+    const down = path.join(dir, 'out.bin');
+    fsx.writeFileSync(up, Buffer.from([0, 1, 2, 255]));
+    mock.on('PUT', /\/Attachment\('1'\)\/\$value/, (req, res) => json(res, 204, undefined, { 'x-got': Buffer.from(req.body, 'latin1').length, 'x-ct': req.headers['content-type'], 'x-len': req.headers['content-length'] }));
+    mock.on('GET', /\/Attachment\('1'\)\/\$value/, (req, res) => {
+      res.writeHead(200, { 'content-type': 'application/pdf' });
+      res.end(Buffer.from('%PDF-1.7 bytes'));
+    });
+    const send = await setup({ operation: 'request', path: "Attachment('1')/$value" });
+    let r = await send({ method: 'PUT', uploadFile: up });
+    assert.equal(r.msg.odata.statusCode, 204);
+    assert.equal(r.msg.odata.headers['x-ct'], 'application/octet-stream');
+    assert.equal(r.msg.odata.headers['x-len'], '4');
+    r = await send({ method: 'PUT', uploadFile: up, headers: { 'Content-Type': 'application/pdf' } });
+    assert.equal(r.msg.odata.headers['x-ct'], 'application/pdf');
+
+    r = await send({ downloadFile: down });
+    assert.deepEqual(r.msg.payload, { file: down, bytes: 14 });
+    assert.equal(fsx.readFileSync(down, 'utf8'), '%PDF-1.7 bytes');
+
+    r = await send({});
+    assert.ok(Buffer.isBuffer(r.msg.payload), 'binary content is returned as a Buffer');
+    assert.equal(r.msg.payload.toString(), '%PDF-1.7 bytes');
+
+    r = await send({ method: 'PUT', uploadFile: path.join(dir, 'missing.bin') });
+    assert.match(r.error.message, /ENOENT/);
+  } finally {
+    fsx.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('request: answers without Content-Type, XML and text', async () => {
+  mock.on('GET', /\/raw\/none/, (req, res) => {
+    res.removeHeader('content-type');
+    res.end('no type');
+  });
+  mock.on('GET', /\/raw\/xml/, (req, res) => {
+    res.writeHead(200, { 'content-type': 'application/atom+xml' });
+    res.end('<feed/>');
+  });
+  const send = await setup({ operation: 'request' });
+  let r = await send({ path: 'raw/none' });
+  assert.ok(Buffer.isBuffer(r.msg.payload));
+  r = await send({ path: 'raw/xml' });
+  assert.equal(r.msg.payload, '<feed/>');
+});
+
+test('batch: JSON format for V4 (results, missing responses), refused for V2, 415 explained', async () => {
+  mock.on('POST', `${V4SVC}/$batch`, (req, res) => {
+    const body = JSON.parse(req.body);
+    json(res, 200, {
+      responses: [
+        { id: body.requests[0].id, status: 200, headers: { 'content-type': 'application/json', 'sap-messages': JSON.stringify([{ message: 'hi', numericSeverity: 2 }]) }, body: { value: [{ Product: 'P1' }] } },
+        { id: body.requests[1].id, status: 400, body: { error: { message: 'bad' } } },
+      ],
+    });
+  });
+  const send = await setup({ service: V4SVC, operation: 'batch', batchFormat: 'json' });
+  let r = await send({ payload: [{ url: 'Product' }, { method: 'PATCH', url: "Product('P1')", body: {} }, { url: 'ProductText' }] });
+  const req = lastOf('POST', /\$batch/);
+  assert.equal(req.headers['content-type'], 'application/json');
+  assert.equal(req.headers.accept, 'application/json');
+  assert.deepEqual(r.msg.payload[0].data, [{ Product: 'P1' }]);
+  assert.deepEqual(r.msg.payload[0].messages, [{ code: undefined, message: 'hi', severity: 'info', target: undefined, longtextUrl: undefined }]);
+  assert.equal(r.msg.payload[1].ok, false);
+  assert.equal(r.msg.payload[2], null);
+  assert.equal(r.msg.odata.errors, 2);
+  assert.equal(r.msg.odata.format, 'json');
+
+  r = await send({ service: 'GWSAMPLE_BASIC', payload: [{ url: 'A' }] });
+  assert.match(r.error.message, /only defined for OData V4/);
+
+  mock.on('POST', `${V4SVC}/$batch`, (req, res) => json(res, 415, { error: { code: 'X', message: 'unsupported format' } }));
+  r = await send({ payload: [{ url: 'Product' }] });
+  assert.match(r.error.message, /unsupported format - this server does not support the JSON batch format, use batchFormat "multipart"/);
+  r = await send({ batchFormat: 'multipart', payload: [{ url: 'Product' }] });
+  assert.equal(r.error.statusCode, 415);
+  assert.doesNotMatch(r.error.message, /use batchFormat/);
 });

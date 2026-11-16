@@ -14,7 +14,17 @@ module.exports = function (RED) {
       language: config.language,
       authType: config.authType || 'basic',
       tokenUrl: config.tokenUrl,
+      grantType: config.grantType || 'client_credentials',
+      clientAuth: config.clientAuth || 'basic',
       scope: config.scope,
+      spn: config.spn || undefined,
+      destinationName: config.destinationName,
+      proxy:
+        config.proxyMode === 'manual'
+          ? { url: config.proxyUrl, auth: config.proxyAuth || 'none', noProxy: config.noProxy, domain: config.proxyDomain, workstation: config.proxyWorkstation, spn: config.proxySpn || undefined }
+          : config.proxyMode === 'env'
+            ? { useEnv: true, auth: config.proxyAuth || undefined, domain: config.proxyDomain, workstation: config.proxyWorkstation, spn: config.proxySpn || undefined }
+            : undefined,
       rejectUnauthorized: config.rejectUnauthorized !== false,
       timeout: Number(config.timeout) || 60000,
       metadataTtl: (Number(config.metadataTtl) || 3600) * 1000,
@@ -30,10 +40,15 @@ module.exports = function (RED) {
       token: { type: 'password' },
       clientId: { type: 'text' },
       clientSecret: { type: 'password' },
+      assertion: { type: 'password' },
       cert: { type: 'text' },
       key: { type: 'password' },
+      pfx: { type: 'password' },
       passphrase: { type: 'password' },
       ca: { type: 'text' },
+      proxyUser: { type: 'text' },
+      proxyPassword: { type: 'password' },
+      userJwt: { type: 'password' },
     },
   });
 

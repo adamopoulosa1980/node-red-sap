@@ -99,7 +99,11 @@ async function createMockSap({ secure = false, csrf = true } = {}) {
   const { port } = server.address();
   mock.server = server;
   mock.url = `${secure ? 'https' : 'http'}://127.0.0.1:${port}`;
-  mock.close = () => new Promise((r) => server.close(r));
+  mock.close = () =>
+    new Promise((r) => {
+      server.close(() => r());
+      server.closeAllConnections();
+    });
   return mock;
 }
 

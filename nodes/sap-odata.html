@@ -33,6 +33,7 @@
         tunnel: { value: false },
         etag: { value: 'auto' },
         atomic: { value: true },
+        batchFormat: { value: 'multipart' },
         useMetadata: { value: true },
         convertDates: { value: true },
         stripMetadata: { value: false },
@@ -250,6 +251,13 @@
     <input type="checkbox" id="node-input-atomic" style="width:auto; margin:0">
     <label for="node-input-atomic" style="width:auto">Group consecutive changes in one change set (atomic)</label>
   </div>
+  <div class="form-row sap-row-batch">
+    <label for="node-input-batchFormat">Batch format</label>
+    <select id="node-input-batchFormat" style="width:250px">
+      <option value="multipart">multipart/mixed (V2 + V4)</option>
+      <option value="json">JSON (V4 only)</option>
+    </select>
+  </div>
   <div class="form-row">
     <label>&nbsp;</label>
     <input type="checkbox" id="node-input-useMetadata" style="width:auto; margin:0">
@@ -291,6 +299,10 @@
     <dd>Extra request headers (e.g. <code>Prefer</code>, <code>sap-contextid-accept</code>).</dd>
     <dt>method, path</dt>
     <dd>For <code>request</code>: any verb and path (e.g. <code>A_Doc('1')/$value</code>, <code>$links</code>).</dd>
+    <dt>uploadFile / downloadFile <span class="property-type">string</span></dt>
+    <dd>For <code>request</code>: stream a file as request body (e.g. <code>PUT .../$value</code>) or stream the response into a file - no buffering in memory.</dd>
+    <dt>batchFormat <span class="property-type">string</span></dt>
+    <dd><code>multipart</code> or <code>json</code> (OData V4 JSON batch).</dd>
     <dt>fetchAll <span class="property-type">boolean</span></dt>
     <dd>Follow <code>__next</code> / <code>@odata.nextLink</code>.</dd>
   </dl>
@@ -300,7 +312,7 @@
     <dt>payload</dt>
     <dd>Entity, array of entities, count, function result, or an array of <code>{status, ok, headers, body, data}</code> for batch.</dd>
     <dt>odata <span class="property-type">object</span></dt>
-    <dd><code>{operation, version, service, statusCode, count, nextLink, etag, url, ...}</code></dd>
+    <dd><code>{operation, version, service, statusCode, count, nextLink, etag, url, messages, ...}</code> - <code>messages</code> are the SAP business messages of the <code>sap-message</code> / <code>sap-messages</code> headers (warnings and info returned with successful calls).</dd>
   </dl>
   <p>Errors are thrown (use a <i>catch</i> node); <code>msg.error</code> contains the SAP message, code and <code>errordetails</code>.</p>
 

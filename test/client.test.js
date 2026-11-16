@@ -24,7 +24,7 @@ test('constructor validation', () => {
   assert.equal(c.baseUrl, 'https://h:1');
   assert.deepEqual(c.credentials, {});
   assert.equal(c.cfg.authType, 'basic');
-  assert.deepEqual(c.tls, { rejectUnauthorized: true, ca: undefined, cert: undefined, key: undefined, passphrase: undefined });
+  assert.deepEqual(c.tls, { rejectUnauthorized: true, ca: undefined, cert: undefined, key: undefined, pfx: undefined, passphrase: undefined });
   const c2 = new SapClient({ url: 'https://h', rejectUnauthorized: false, credentials: { ca: 'CA' } });
   assert.equal(c2.tls.rejectUnauthorized, false);
   assert.equal(c2.tls.ca, 'CA');

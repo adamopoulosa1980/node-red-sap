@@ -5,3 +5,6 @@ coverage/
 sap-api-key-sandbox.txt
 *.key.txt
 .env
+A4H_*.txt
+sap-trial-credentials.txt
+A4H_Multiple.txt

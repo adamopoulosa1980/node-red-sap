@@ -3,12 +3,28 @@
     category: 'config',
     defaults: {
       name: { value: '' },
-      url: { value: '', required: true, validate: RED.validators.regex(/^https?:\/\/[^\s]+$/) },
+      url: {
+        value: '',
+        validate: function (v) {
+          return $('#node-config-input-authType').val() === 'destination' || this.authType === 'destination' || /^https?:\/\/[^\s]+$/.test(v);
+        },
+      },
       client: { value: '', validate: RED.validators.regex(/^(\d{3})?$/) },
       language: { value: '' },
       authType: { value: 'basic' },
       tokenUrl: { value: '' },
+      grantType: { value: 'client_credentials' },
+      clientAuth: { value: 'basic' },
       scope: { value: '' },
+      spn: { value: '' },
+      destinationName: { value: '' },
+      proxyMode: { value: 'none' },
+      proxyUrl: { value: '' },
+      proxyAuth: { value: 'none' },
+      noProxy: { value: '' },
+      proxyDomain: { value: '' },
+      proxyWorkstation: { value: '' },
+      proxySpn: { value: '' },
       rejectUnauthorized: { value: true },
       timeout: { value: 60000, validate: RED.validators.number() },
       metadataTtl: { value: 3600, validate: RED.validators.number() },
@@ -19,23 +35,43 @@
       token: { type: 'password' },
       clientId: { type: 'text' },
       clientSecret: { type: 'password' },
+      assertion: { type: 'password' },
       cert: { type: 'text' },
       key: { type: 'password' },
+      pfx: { type: 'password' },
       passphrase: { type: 'password' },
       ca: { type: 'text' },
+      proxyUser: { type: 'text' },
+      proxyPassword: { type: 'password' },
+      userJwt: { type: 'password' },
     },
     label: function () {
-      return this.name || (this.url ? this.url + (this.client ? ' [' + this.client + ']' : '') : 'sap-connection');
+      if (this.name) return this.name;
+      if (this.authType === 'destination') return 'BTP destination ' + this.destinationName;
+      return this.url ? this.url + (this.client ? ' [' + this.client + ']' : '') : 'sap-connection';
     },
     oneditprepare: function () {
       function toggle() {
         var t = $('#node-config-input-authType').val();
-        $('.sap-auth-basic').toggle(t === 'basic');
+        var g = $('#node-config-input-grantType').val();
+        $('.sap-url').toggle(t !== 'destination');
+        $('.sap-auth-basic').toggle(t === 'basic' || (t === 'oauth2' && g === 'password'));
         $('.sap-auth-token').toggle(t === 'bearer' || t === 'apikey');
         $('.sap-auth-oauth2').toggle(t === 'oauth2');
-        $('.sap-auth-cert').toggle(t === 'cert');
+        $('.sap-auth-assertion').toggle(t === 'oauth2' && (g === 'saml2-bearer' || g === 'jwt-bearer'));
+        $('.sap-auth-cert').toggle(t === 'cert' || t === 'oauth2');
+        $('.sap-auth-kerberos').toggle(t === 'kerberos');
+        $('.sap-auth-destination').toggle(t === 'destination');
+        var p = $('#node-config-input-proxyMode').val();
+        var pa = $('#node-config-input-proxyAuth').val();
+        $('.sap-proxy').toggle(p !== 'none' && t !== 'destination');
+        $('.sap-proxy-manual').toggle(p === 'manual' && t !== 'destination');
+        $('.sap-proxy-cred').toggle(p !== 'none' && t !== 'destination' && (pa === 'basic' || pa === 'ntlm'));
+        $('.sap-proxy-ntlm').toggle(p !== 'none' && t !== 'destination' && pa === 'ntlm');
+        $('.sap-proxy-negotiate').toggle(p !== 'none' && t !== 'destination' && pa === 'negotiate');
+        $('.sap-proxy-mode').toggle(t !== 'destination');
       }
-      $('#node-config-input-authType').on('change', toggle);
+      $('#node-config-input-authType, #node-config-input-grantType, #node-config-input-proxyMode, #node-config-input-proxyAuth').on('change', toggle);
       toggle();
     },
   });
@@ -47,6 +83,19 @@
     <input type="text" id="node-config-input-name" placeholder="Name">
   </div>
   <div class="form-row">
+    <label for="node-config-input-authType"><i class="fa fa-lock"></i> Auth</label>
+    <select id="node-config-input-authType">
+      <option value="basic">Basic (user / password)</option>
+      <option value="oauth2">OAuth 2.0</option>
+      <option value="cert">X.509 client certificate</option>
+      <option value="kerberos">Kerberos / SPNEGO (SSO)</option>
+      <option value="destination">SAP BTP destination</option>
+      <option value="bearer">Bearer token</option>
+      <option value="apikey">API Key (api.sap.com sandbox)</option>
+      <option value="none">None</option>
+    </select>
+  </div>
+  <div class="form-row sap-url">
     <label for="node-config-input-url"><i class="fa fa-globe"></i> Host URL</label>
     <input type="text" id="node-config-input-url" placeholder="https://my-sap-host:44300">
   </div>
@@ -56,17 +105,18 @@
     <label for="node-config-input-language" style="margin-left:20px; width:auto">Language</label>
     <input type="text" id="node-config-input-language" placeholder="EN" style="width:60px">
   </div>
-  <div class="form-row">
-    <label for="node-config-input-authType"><i class="fa fa-lock"></i> Auth</label>
-    <select id="node-config-input-authType">
-      <option value="basic">Basic (user / password)</option>
-      <option value="oauth2">OAuth2 client credentials</option>
-      <option value="bearer">Bearer token</option>
-      <option value="apikey">API Key (api.sap.com sandbox)</option>
-      <option value="cert">X.509 client certificate</option>
-      <option value="none">None</option>
-    </select>
+
+  <!-- BTP destination -->
+  <div class="form-row sap-auth-destination">
+    <label for="node-config-input-destinationName"><i class="fa fa-cloud"></i> Destination</label>
+    <input type="text" id="node-config-input-destinationName" placeholder="name in the BTP subaccount">
   </div>
+  <div class="form-row sap-auth-destination">
+    <label for="node-config-input-userJwt">User JWT</label>
+    <input type="password" id="node-config-input-userJwt" placeholder="optional - principal propagation / user token exchange">
+  </div>
+
+  <!-- basic / password grant -->
   <div class="form-row sap-auth-basic">
     <label for="node-config-input-user"><i class="fa fa-user"></i> User</label>
     <input type="text" id="node-config-input-user">
@@ -79,9 +129,20 @@
     <label for="node-config-input-token"><i class="fa fa-key"></i> Token / Key</label>
     <input type="password" id="node-config-input-token">
   </div>
+
+  <!-- OAuth 2.0 -->
+  <div class="form-row sap-auth-oauth2">
+    <label for="node-config-input-grantType">Grant</label>
+    <select id="node-config-input-grantType">
+      <option value="client_credentials">Client credentials</option>
+      <option value="password">Resource owner password</option>
+      <option value="saml2-bearer">SAML 2.0 bearer assertion</option>
+      <option value="jwt-bearer">JWT bearer</option>
+    </select>
+  </div>
   <div class="form-row sap-auth-oauth2">
     <label for="node-config-input-tokenUrl">Token URL</label>
-    <input type="text" id="node-config-input-tokenUrl" placeholder="https://<subdomain>.authentication.<region>.hana.ondemand.com/oauth/token">
+    <input type="text" id="node-config-input-tokenUrl" placeholder="https://<host>/sap/bc/sec/oauth2/token or https://<subdomain>.authentication.<region>.hana.ondemand.com/oauth/token">
   </div>
   <div class="form-row sap-auth-oauth2">
     <label for="node-config-input-clientId">Client ID</label>
@@ -92,9 +153,23 @@
     <input type="password" id="node-config-input-clientSecret">
   </div>
   <div class="form-row sap-auth-oauth2">
+    <label for="node-config-input-clientAuth">Client auth</label>
+    <select id="node-config-input-clientAuth">
+      <option value="basic">HTTP Basic header</option>
+      <option value="body">client_id + client_secret in body</option>
+      <option value="none">client_id only (mTLS / public client)</option>
+    </select>
+  </div>
+  <div class="form-row sap-auth-oauth2">
     <label for="node-config-input-scope">Scope</label>
     <input type="text" id="node-config-input-scope">
   </div>
+  <div class="form-row sap-auth-assertion">
+    <label for="node-config-input-assertion">Assertion</label>
+    <input type="password" id="node-config-input-assertion" placeholder="SAML assertion (XML or base64url) / JWT">
+  </div>
+
+  <!-- certificates -->
   <div class="form-row sap-auth-cert">
     <label for="node-config-input-cert">Certificate (PEM)</label>
     <textarea id="node-config-input-cert" rows="3" style="width:70%"></textarea>
@@ -104,12 +179,69 @@
     <input type="password" id="node-config-input-key">
   </div>
   <div class="form-row sap-auth-cert">
+    <label for="node-config-input-pfx">or PFX/P12 (base64)</label>
+    <input type="password" id="node-config-input-pfx">
+  </div>
+  <div class="form-row sap-auth-cert">
     <label for="node-config-input-passphrase">Passphrase</label>
     <input type="password" id="node-config-input-passphrase">
   </div>
+
+  <!-- Kerberos -->
+  <div class="form-row sap-auth-kerberos">
+    <label for="node-config-input-spn">SPN</label>
+    <input type="text" id="node-config-input-spn" placeholder="default HTTP/&lt;host&gt; (Windows) or HTTP@&lt;host&gt;">
+  </div>
+
+  <!-- proxy -->
+  <div class="form-row sap-proxy-mode">
+    <label for="node-config-input-proxyMode"><i class="fa fa-random"></i> Proxy</label>
+    <select id="node-config-input-proxyMode">
+      <option value="none">No proxy</option>
+      <option value="env">From environment (HTTP(S)_PROXY, NO_PROXY)</option>
+      <option value="manual">Manual</option>
+    </select>
+  </div>
+  <div class="form-row sap-proxy-manual">
+    <label for="node-config-input-proxyUrl">Proxy URL</label>
+    <input type="text" id="node-config-input-proxyUrl" placeholder="http://proxy.company.local:8080">
+  </div>
+  <div class="form-row sap-proxy-manual">
+    <label for="node-config-input-noProxy">No proxy for</label>
+    <input type="text" id="node-config-input-noProxy" placeholder="localhost, .company.local, 10.0.0.0/8">
+  </div>
+  <div class="form-row sap-proxy">
+    <label for="node-config-input-proxyAuth">Proxy auth</label>
+    <select id="node-config-input-proxyAuth">
+      <option value="none">None (or credentials in the proxy URL)</option>
+      <option value="basic">Basic</option>
+      <option value="ntlm">NTLM</option>
+      <option value="negotiate">Kerberos (Negotiate)</option>
+    </select>
+  </div>
+  <div class="form-row sap-proxy-cred">
+    <label for="node-config-input-proxyUser">Proxy user</label>
+    <input type="text" id="node-config-input-proxyUser" placeholder="user or DOMAIN\user">
+  </div>
+  <div class="form-row sap-proxy-cred">
+    <label for="node-config-input-proxyPassword">Proxy password</label>
+    <input type="password" id="node-config-input-proxyPassword">
+  </div>
+  <div class="form-row sap-proxy-ntlm">
+    <label for="node-config-input-proxyDomain">Domain</label>
+    <input type="text" id="node-config-input-proxyDomain" style="width:120px">
+    <label for="node-config-input-proxyWorkstation" style="margin-left:20px; width:auto">Workstation</label>
+    <input type="text" id="node-config-input-proxyWorkstation" style="width:120px">
+  </div>
+  <div class="form-row sap-proxy-negotiate">
+    <label for="node-config-input-proxySpn">Proxy SPN</label>
+    <input type="text" id="node-config-input-proxySpn" placeholder="default HTTP/&lt;proxy host&gt;">
+  </div>
+
+  <!-- TLS / misc -->
   <div class="form-row">
     <label for="node-config-input-ca">CA (PEM)</label>
-    <textarea id="node-config-input-ca" rows="2" style="width:70%" placeholder="optional - for self-signed SAP certificates"></textarea>
+    <textarea id="node-config-input-ca" rows="2" style="width:70%" placeholder="optional - for self-signed SAP or proxy certificates"></textarea>
   </div>
   <div class="form-row">
     <label>&nbsp;</label>
@@ -129,18 +261,23 @@
 <script type="text/html" data-help-name="sap-connection">
   <p>Connection to an SAP Gateway / S/4HANA / BTP ABAP system. One connection is one SAP session:
   session cookies and the <code>X-CSRF-Token</code> are shared by all <code>sap-odata</code> nodes using it.</p>
-  <h3>Properties</h3>
+  <h3>Authentication</h3>
   <dl class="message-properties">
-    <dt>Host URL <span class="property-type">string</span></dt>
-    <dd>Protocol, host and port only, e.g. <code>https://my-sap:44300</code>. Service paths are configured on the <code>sap-odata</code> node.</dd>
-    <dt>SAP client <span class="property-type">string</span></dt>
-    <dd>Sent as <code>sap-client</code> query parameter on every request.</dd>
-    <dt>Language <span class="property-type">string</span></dt>
-    <dd>Sent as <code>sap-language</code> (texts and error messages).</dd>
-    <dt>Auth</dt>
-    <dd>Basic, OAuth2 client credentials (BTP / S/4HANA Cloud communication arrangements), Bearer token,
-      API Key (<code>APIKey</code> header for <code>sandbox.api.sap.com</code>), X.509 client certificate or none.</dd>
+    <dt>Basic</dt><dd>SAP user and password.</dd>
+    <dt>OAuth 2.0</dt><dd>Client credentials, resource owner password, SAML 2.0 bearer assertion (RFC 7522) or JWT bearer (RFC 7523).
+      Refresh tokens are used when returned. Client authentication via Basic header, body or client certificate (mTLS, e.g. XSUAA <code>x509</code>).</dd>
+    <dt>X.509</dt><dd>PEM certificate + key, or PFX/P12 (base64).</dd>
+    <dt>Kerberos / SPNEGO</dt><dd>Single sign-on with the Kerberos credentials of the Node-RED process. Needs <code>npm install kerberos</code>.</dd>
+    <dt>SAP BTP destination</dt><dd>URL, authentication, sap-client, client certificates and the Cloud Connector (Connectivity proxy, location ID)
+      are taken from the destination via the SAP Cloud SDK. Needs <code>npm install @sap-cloud-sdk/connectivity</code> and a binding to the
+      destination (and, for on-premise systems, connectivity) service.</dd>
+    <dt>API Key</dt><dd><code>APIKey</code> header for <code>sandbox.api.sap.com</code>.</dd>
   </dl>
+  <h3>Proxy</h3>
+  <p>HTTP or HTTPS proxy, manual or from <code>HTTPS_PROXY</code> / <code>HTTP_PROXY</code> / <code>ALL_PROXY</code> / <code>NO_PROXY</code>.
+  HTTPS targets are tunnelled with <code>CONNECT</code>; HTTP targets use absolute-form requests.
+  Proxy authentication: Basic, NTLM (v2) or Kerberos (Negotiate). <i>No proxy for</i> accepts host names (sub domains included), <code>.suffix</code>,
+  wildcards, <code>host:port</code> and IPv4/IPv6 CIDR ranges.</p>
   <h3>Details</h3>
   <p>Modifying requests fetch a CSRF token automatically (<code>GET</code> with <code>X-CSRF-Token: Fetch</code>) and refresh it once
   when SAP answers <code>403</code> with <code>X-CSRF-Token: Required</code>.</p>

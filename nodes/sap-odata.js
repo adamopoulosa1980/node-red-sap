@@ -1,7 +1,9 @@
 'use strict';
 
 const odata = require('../lib/odata');
-const { buildBatch, parseBatch } = require('../lib/batch');
+const fs = require('node:fs');
+const { buildBatch, parseBatch, buildJsonBatch, parseJsonBatch } = require('../lib/batch');
+const { parseSapMessages } = require('../lib/client');
 
 const OPERATIONS = ['query', 'get', 'count', 'create', 'update', 'delete', 'function', 'batch', 'metadata', 'catalog', 'request'];
 const NEEDS_KEY = new Set(['get', 'update', 'delete']);
@@ -36,6 +38,17 @@ function updateVerb(setting, version) {
 
 function extractEtag(entity, headers) {
   return pick(headers && headers.etag, entity && entity.__metadata && entity.__metadata.etag, entity && entity['@odata.etag']);
+}
+
+const SEVERITY = { 1: 'success', 2: 'info', 3: 'warning', 4: 'error' };
+
+/** Adds RAP messages returned in the entity body (V4 property SAP__Messages) to the header messages. */
+function withBodyMessages(messages, data) {
+  const list = data && !Array.isArray(data) && Array.isArray(data.SAP__Messages) ? data.SAP__Messages : [];
+  return [
+    ...messages,
+    ...list.map((m) => ({ code: m.code, message: m.message, severity: SEVERITY[m.numericSeverity], target: m.target, longtextUrl: m.longtextUrl })),
+  ];
 }
 
 module.exports = function (RED) {
@@ -113,12 +126,30 @@ module.exports = function (RED) {
         const method = pick(msg.method, config.method, 'GET').toUpperCase();
         const p = pick(msg.path, config.path) || '';
         const target = /^(https?:\/\/|\/sap\/)/i.test(p) ? p : `${svc}/${p.replace(/^\/+/, '')}`;
-        const res = await client.request(method, target, { headers, body: method === 'GET' ? undefined : msg.payload, servicePath: svc });
-        return { payload: postProcess(res.body, version), odata: { ...meta, statusCode: res.statusCode, headers: res.headers, url: res.url } };
+        let body = method === 'GET' ? undefined : msg.payload;
+        if (msg.uploadFile) {
+          // streaming upload (e.g. media resources: PUT .../$value, POST to a media entity set)
+          const size = (await fs.promises.stat(msg.uploadFile)).size;
+          body = () => fs.createReadStream(msg.uploadFile);
+          headers['Content-Length'] = size;
+          if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/octet-stream';
+        }
+        const sink = msg.downloadFile ? fs.createWriteStream(msg.downloadFile) : undefined;
+        const res = await client.request(method, target, { headers, body, servicePath: svc, raw: true, sink });
+        const odataOut = { ...meta, statusCode: res.statusCode, headers: res.headers, url: res.url, messages: res.messages };
+        if (res.streamed) return { payload: { file: msg.downloadFile, bytes: sink.bytesWritten }, odata: odataOut };
+        const ct = res.headers['content-type'] || '';
+        let payload = res.body; // binary (Buffer) unless empty, JSON, XML or text
+        if (!res.body.length) payload = '';
+        else if (/json/i.test(ct)) payload = postProcess(JSON.parse(res.text), version);
+        else if (/xml|text/i.test(ct)) payload = res.text;
+        return { payload, odata: odataOut };
       }
 
       if (operation === 'batch') {
         if (!Array.isArray(msg.payload)) throw new Error('batch: msg.payload must be an array of requests');
+        const format = pick(msg.batchFormat, config.batchFormat, 'multipart');
+        if (format === 'json' && version !== 'v4') throw new Error('batch: the JSON batch format is only defined for OData V4');
         const model = msg.payload.some((r) => !r.url && r.key !== undefined) ? await loadModel(svc) : undefined;
         const requests = msg.payload.map((r) => {
           if (r.url) return r;
@@ -128,19 +159,33 @@ module.exports = function (RED) {
           return { ...r, url: qs ? `${path}?${qs}` : path };
         });
         const atomic = msg.atomic !== undefined ? msg.atomic !== false : config.atomic !== false;
-        const batch = buildBatch(requests, { atomic });
-        const res = await client.request('POST', `${svc}/$batch`, {
-          headers: { ...headers, 'Content-Type': batch.contentType, Accept: 'multipart/mixed' },
-          body: batch.body,
-          servicePath: svc,
-          raw: true,
-        });
-        const results = parseBatch(res.text, res.headers['content-type'], batch.layout, requests.length).map((r) => ({
-          ...r,
-          data: r.ok ? postProcess(odata.normalize(r.body, version).data, version) : undefined,
-        }));
-        const errors = results.filter((r) => !r.ok).length;
-        return { payload: results, odata: { ...meta, statusCode: res.statusCode, errors } };
+        const json = format === 'json';
+        const batch = json ? buildJsonBatch(requests, { atomic }) : buildBatch(requests, { atomic });
+        let res;
+        try {
+          res = await client.request('POST', `${svc}/$batch`, {
+            headers: { ...headers, 'Content-Type': batch.contentType, Accept: json ? 'application/json' : 'multipart/mixed' },
+            body: batch.body,
+            servicePath: svc,
+            raw: true,
+          });
+        } catch (e) {
+          // SAP Gateway (ABAP) answers the OData 4.01 JSON batch format with 415; only multipart/mixed is supported there
+          if (json && e.statusCode === 415) e.message = `${e.message} - this server does not support the JSON batch format, use batchFormat "multipart"`;
+          throw e;
+        }
+        const parsed = json ? parseJsonBatch(res.text, batch.layout) : parseBatch(res.text, res.headers['content-type'], batch.layout, requests.length);
+        const results = parsed.map((r) =>
+          r
+            ? {
+                ...r,
+                messages: parseSapMessages(r.headers),
+                data: r.ok ? postProcess(odata.normalize(r.body, version).data, version) : undefined,
+              }
+            : null
+        );
+        const errors = results.filter((r) => !r || !r.ok).length;
+        return { payload: results, odata: { ...meta, format, statusCode: res.statusCode, errors, messages: res.messages } };
       }
 
       const entitySet = pick(msg.entitySet, config.entitySet);
@@ -154,9 +199,15 @@ module.exports = function (RED) {
         const params = msg.params || (msg.payload && typeof msg.payload === 'object' && !Array.isArray(msg.payload) ? msg.payload : {});
         const bindingPath = pick(msg.bindingPath, config.bindingPath);
         const r = odata.operationRequest({ name, params, version, definition, httpMethod: pick(msg.method, config.method), bindingPath });
-        const res = await client.request(r.method, svc + r.path, { query: r.query, headers, body: r.body, servicePath: svc });
+        const h = { ...headers };
+        if (bindingPath && r.method === 'POST') {
+          // an action bound to an entity with an ETag must be conditional (OData 4.01 11.5.4.1; enforced by SAP RAP)
+          const etag = await resolveEtag(msg, svc, `/${bindingPath.replace(/^\/+/, '')}`, headers, version);
+          if (etag) h['If-Match'] = etag;
+        }
+        const res = await client.request(r.method, svc + r.path, { query: r.query, headers: h, body: r.body, servicePath: svc });
         const norm = odata.normalize(res.body, version);
-        return { payload: postProcess(norm.data, version), odata: { ...meta, statusCode: res.statusCode, headers: res.headers, url: res.url } };
+        return { payload: postProcess(norm.data, version), odata: { ...meta, statusCode: res.statusCode, headers: res.headers, url: res.url, messages: res.messages } };
       }
 
       if (NEEDS_KEY.has(operation) && (key === undefined || key === null || key === '')) {
@@ -175,11 +226,11 @@ module.exports = function (RED) {
           const fetchAll = msg.fetchAll !== undefined ? msg.fetchAll === true : config.fetchAll === true;
           if (norm.isCollection && fetchAll) {
             const all = await readAll(res.url, headers, svc, version, res);
-            return { payload: postProcess(all.data, version), odata: { ...meta, count: norm.count, nextLink: all.nextLink, pages: all.pages, url: res.url } };
+            return { payload: postProcess(all.data, version), odata: { ...meta, count: norm.count, nextLink: all.nextLink, pages: all.pages, url: res.url, messages: res.messages } };
           }
           return {
             payload: postProcess(norm.data, version),
-            odata: { ...meta, count: norm.count, nextLink: norm.nextLink, etag: extractEtag(norm.data, res.headers), statusCode: res.statusCode, url: res.url },
+            odata: { ...meta, count: norm.count, nextLink: norm.nextLink, etag: extractEtag(norm.data, res.headers), statusCode: res.statusCode, url: res.url, messages: res.messages },
           };
         }
         case 'count': {
@@ -187,14 +238,14 @@ module.exports = function (RED) {
           const countQuery = {};
           for (const f of ['filter', 'search']) if (q[f] !== undefined) countQuery[f] = q[f];
           const res = await client.request('GET', `${svc}${path}/$count`, { query: odata.buildQuery(countQuery, version), headers: { Accept: 'text/plain', ...headers }, servicePath: svc });
-          return { payload: Number(String(res.text).trim()), odata: { ...meta, statusCode: res.statusCode, url: res.url } };
+          return { payload: Number(String(res.text).trim()), odata: { ...meta, statusCode: res.statusCode, url: res.url, messages: res.messages } };
         }
         case 'create': {
           const res = await client.request('POST', svc + path, { headers, body: msg.payload, servicePath: svc });
           const norm = odata.normalize(res.body, version);
           return {
             payload: postProcess(norm.data, version),
-            odata: { ...meta, statusCode: res.statusCode, location: res.headers.location, etag: extractEtag(norm.data, res.headers), url: res.url },
+            odata: { ...meta, statusCode: res.statusCode, location: res.headers.location, etag: extractEtag(norm.data, res.headers), url: res.url, messages: res.messages },
           };
         }
         case 'update': {
@@ -211,7 +262,7 @@ module.exports = function (RED) {
           const norm = odata.normalize(res.body, version);
           return {
             payload: res.statusCode === 204 ? msg.payload : postProcess(norm.data, version),
-            odata: { ...meta, statusCode: res.statusCode, method: verb, etag: extractEtag(norm.data, res.headers), url: res.url },
+            odata: { ...meta, statusCode: res.statusCode, method: verb, etag: extractEtag(norm.data, res.headers), url: res.url, messages: res.messages },
           };
         }
         default: {
@@ -220,7 +271,7 @@ module.exports = function (RED) {
           const h = { ...headers };
           if (etag) h['If-Match'] = etag;
           const res = await client.request('DELETE', svc + path, { headers: h, servicePath: svc });
-          return { payload: null, odata: { ...meta, statusCode: res.statusCode, url: res.url } };
+          return { payload: null, odata: { ...meta, statusCode: res.statusCode, url: res.url, messages: res.messages } };
         }
       }
     }
@@ -229,6 +280,7 @@ module.exports = function (RED) {
       node.status({ fill: 'blue', shape: 'dot', text: 'requesting' });
       try {
         const result = await execute(msg);
+        if (result.odata.messages) result.odata.messages = withBodyMessages(result.odata.messages, result.payload);
         Object.assign(msg, result);
         node.status({ fill: 'green', shape: 'dot', text: `${result.odata.operation} ${result.odata.statusCode || 'ok'}` });
         send(msg);

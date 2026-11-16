@@ -8,7 +8,11 @@
     "odata",
     "s4hana",
     "gateway",
-    "btp"
+    "btp",
+    "proxy",
+    "ntlm",
+    "kerberos",
+    "oauth2"
   ],
   "license": "MIT",
   "main": "lib/client.js",
@@ -19,7 +23,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "node-red": {
     "version": ">=3.0.0",
@@ -29,8 +33,11 @@
     }
   },
   "scripts": {
+    "test": "node --test --experimental-test-coverage --test-coverage-include=lib/** --test-coverage-include=nodes/** --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"test/**/*.test.js\"",
     "test:live": "node test/live/sandbox-v2.js && node test/live/sandbox-v4.js",
-    "test": "node --test --experimental-test-coverage --test-coverage-include=lib/** --test-coverage-include=nodes/** --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"test/**/*.test.js\""
+    "test:trial": "node test/live/local-trial.js",
+    "coverage:lcov": "node --test --experimental-test-coverage --test-coverage-include=lib/** --test-coverage-include=nodes/** --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"test/**/*.test.js\"",
+    "coverage:report": "node tools/uncovered.js"
   },
   "dependencies": {
     "fast-xml-parser": "^5.12.1",
@@ -41,5 +48,25 @@
     "@sap-cloud-sdk/connectivity": "^4.10.0",
     "node-red": "^4.0.9",
     "node-red-node-test-helper": "^0.3.4"
+  },
+  "peerDependencies": {
+    "kerberos": ">=6",
+    "@sap-cloud-sdk/connectivity": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "kerberos": {
+      "optional": true
+    },
+    "@sap-cloud-sdk/connectivity": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adamopoulosa1980/node-red-sap.git"
+  },
+  "homepage": "https://github.com/adamopoulosa1980/node-red-sap#readme",
+  "bugs": {
+    "url": "https://github.com/adamopoulosa1980/node-red-sap/issues"
   }
 }
