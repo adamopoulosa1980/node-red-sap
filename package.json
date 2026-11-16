@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-sap-odata",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Node-RED nodes for SAP Gateway OData V2 / V4: CRUD, function imports, actions, $batch, $metadata, catalog, CSRF and ETag handling",
   "keywords": [
     "node-red",

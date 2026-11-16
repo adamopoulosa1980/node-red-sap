@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/assert-logo-dark.png">
-  <img src="docs/assets/assert-logo-light.png" alt="ASSERT" height="26">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/adamopoulosa1980/node-red-sap/master/docs/assets/assert-logo-dark.png">
+  <img src="https://raw.githubusercontent.com/adamopoulosa1980/node-red-sap/master/docs/assets/assert-logo-light.png" alt="ASSERT" height="26">
 </picture>
 
 # node-red-contrib-sap-odata
