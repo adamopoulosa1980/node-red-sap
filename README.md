@@ -1,5 +1,7 @@
 # node-red-contrib-sap-odata
 
+[![ci](https://github.com/adamopoulosa1980/node-red-sap/actions/workflows/ci.yml/badge.svg)](https://github.com/adamopoulosa1980/node-red-sap/actions/workflows/ci.yml)
+
 Node-RED nodes for **SAP Gateway OData V2 and V4** (S/4HANA on-premise and Cloud, ECC with Gateway, BTP ABAP environment, SAP BTP destinations).
 
 - One `sap-odata` node for everything: **query, read, $count, create, update, delete, function imports, actions (bound and unbound), $batch, $metadata, service catalog** and raw requests (`$value` media, `$links`, …)
@@ -18,7 +20,7 @@ cd ~/.node-red
 npm install /path/to/node-red-sap      # or from npm once published
 ```
 
-Requires **Node.js ≥ 20** and Node-RED ≥ 3. Two optional packages are needed only for the features that use them:
+Requires **Node.js ≥ 22** and Node-RED ≥ 3. Two optional packages are needed only for the features that use them:
 
 | Feature | Install in the Node-RED user directory |
 |---|---|
@@ -118,7 +120,8 @@ Kerberos, NTLM proxies and BTP destinations are covered by the unit tests (NTLMv
 ## Tests
 
 ```bash
-npm test             # unit + Node-RED runtime tests against a mock SAP Gateway and mock proxies, 100 % line/branch/function coverage enforced
+npm test             # unit + Node-RED runtime tests (CI: Node 22, 24 and 26, see .github/workflows/ci.yml)
+npm run test:ci      # the same, and coverage/lcov.info written in the same run against a mock SAP Gateway and mock proxies, 100 % line/branch/function coverage enforced
 npm run test:trial   # live, writes: local ABAP trial (SAP_URL, SAP_USER, SAP_PASSWORD or sap-trial-credentials.txt)
 npm run test:live    # live, read-only: sandbox.api.sap.com (SAP_SANDBOX_API_KEY or sap-api-key-sandbox.txt)
 npm run coverage:lcov && npm run coverage:report   # what is not covered, with its source line

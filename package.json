@@ -23,7 +23,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "node-red": {
     "version": ">=3.0.0",
@@ -34,9 +34,10 @@
   },
   "scripts": {
     "test": "node --test --experimental-test-coverage --test-coverage-include=lib/** --test-coverage-include=nodes/** --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"test/**/*.test.js\"",
-    "test:live": "node test/live/sandbox-v2.js && node test/live/sandbox-v4.js",
+    "test:ci": "node -e \"require('fs').mkdirSync('coverage',{recursive:true})\" && node --test --experimental-test-coverage --test-coverage-include=lib/** --test-coverage-include=nodes/** --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"test/**/*.test.js\"",
     "test:trial": "node test/live/local-trial.js",
-    "coverage:lcov": "node --test --experimental-test-coverage --test-coverage-include=lib/** --test-coverage-include=nodes/** --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"test/**/*.test.js\"",
+    "test:live": "node test/live/sandbox-v2.js && node test/live/sandbox-v4.js",
+    "coverage:lcov": "node -e \"require('fs').mkdirSync('coverage',{recursive:true})\" && node --test --experimental-test-coverage --test-coverage-include=lib/** --test-coverage-include=nodes/** --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"test/**/*.test.js\"",
     "coverage:report": "node tools/uncovered.js"
   },
   "dependencies": {
