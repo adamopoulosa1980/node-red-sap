@@ -1,0 +1,147 @@
+<script type="text/javascript">
+  RED.nodes.registerType('sap-connection', {
+    category: 'config',
+    defaults: {
+      name: { value: '' },
+      url: { value: '', required: true, validate: RED.validators.regex(/^https?:\/\/[^\s]+$/) },
+      client: { value: '', validate: RED.validators.regex(/^(\d{3})?$/) },
+      language: { value: '' },
+      authType: { value: 'basic' },
+      tokenUrl: { value: '' },
+      scope: { value: '' },
+      rejectUnauthorized: { value: true },
+      timeout: { value: 60000, validate: RED.validators.number() },
+      metadataTtl: { value: 3600, validate: RED.validators.number() },
+    },
+    credentials: {
+      user: { type: 'text' },
+      password: { type: 'password' },
+      token: { type: 'password' },
+      clientId: { type: 'text' },
+      clientSecret: { type: 'password' },
+      cert: { type: 'text' },
+      key: { type: 'password' },
+      passphrase: { type: 'password' },
+      ca: { type: 'text' },
+    },
+    label: function () {
+      return this.name || (this.url ? this.url + (this.client ? ' [' + this.client + ']' : '') : 'sap-connection');
+    },
+    oneditprepare: function () {
+      function toggle() {
+        var t = $('#node-config-input-authType').val();
+        $('.sap-auth-basic').toggle(t === 'basic');
+        $('.sap-auth-token').toggle(t === 'bearer' || t === 'apikey');
+        $('.sap-auth-oauth2').toggle(t === 'oauth2');
+        $('.sap-auth-cert').toggle(t === 'cert');
+      }
+      $('#node-config-input-authType').on('change', toggle);
+      toggle();
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="sap-connection">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-url"><i class="fa fa-globe"></i> Host URL</label>
+    <input type="text" id="node-config-input-url" placeholder="https://my-sap-host:44300">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-client"><i class="fa fa-building"></i> SAP client</label>
+    <input type="text" id="node-config-input-client" placeholder="100" style="width:80px">
+    <label for="node-config-input-language" style="margin-left:20px; width:auto">Language</label>
+    <input type="text" id="node-config-input-language" placeholder="EN" style="width:60px">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-authType"><i class="fa fa-lock"></i> Auth</label>
+    <select id="node-config-input-authType">
+      <option value="basic">Basic (user / password)</option>
+      <option value="oauth2">OAuth2 client credentials</option>
+      <option value="bearer">Bearer token</option>
+      <option value="apikey">API Key (api.sap.com sandbox)</option>
+      <option value="cert">X.509 client certificate</option>
+      <option value="none">None</option>
+    </select>
+  </div>
+  <div class="form-row sap-auth-basic">
+    <label for="node-config-input-user"><i class="fa fa-user"></i> User</label>
+    <input type="text" id="node-config-input-user">
+  </div>
+  <div class="form-row sap-auth-basic">
+    <label for="node-config-input-password"><i class="fa fa-key"></i> Password</label>
+    <input type="password" id="node-config-input-password">
+  </div>
+  <div class="form-row sap-auth-token">
+    <label for="node-config-input-token"><i class="fa fa-key"></i> Token / Key</label>
+    <input type="password" id="node-config-input-token">
+  </div>
+  <div class="form-row sap-auth-oauth2">
+    <label for="node-config-input-tokenUrl">Token URL</label>
+    <input type="text" id="node-config-input-tokenUrl" placeholder="https://<subdomain>.authentication.<region>.hana.ondemand.com/oauth/token">
+  </div>
+  <div class="form-row sap-auth-oauth2">
+    <label for="node-config-input-clientId">Client ID</label>
+    <input type="text" id="node-config-input-clientId">
+  </div>
+  <div class="form-row sap-auth-oauth2">
+    <label for="node-config-input-clientSecret">Client secret</label>
+    <input type="password" id="node-config-input-clientSecret">
+  </div>
+  <div class="form-row sap-auth-oauth2">
+    <label for="node-config-input-scope">Scope</label>
+    <input type="text" id="node-config-input-scope">
+  </div>
+  <div class="form-row sap-auth-cert">
+    <label for="node-config-input-cert">Certificate (PEM)</label>
+    <textarea id="node-config-input-cert" rows="3" style="width:70%"></textarea>
+  </div>
+  <div class="form-row sap-auth-cert">
+    <label for="node-config-input-key">Private key (PEM)</label>
+    <input type="password" id="node-config-input-key">
+  </div>
+  <div class="form-row sap-auth-cert">
+    <label for="node-config-input-passphrase">Passphrase</label>
+    <input type="password" id="node-config-input-passphrase">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-ca">CA (PEM)</label>
+    <textarea id="node-config-input-ca" rows="2" style="width:70%" placeholder="optional - for self-signed SAP certificates"></textarea>
+  </div>
+  <div class="form-row">
+    <label>&nbsp;</label>
+    <input type="checkbox" id="node-config-input-rejectUnauthorized" style="width:auto; margin:0">
+    <label for="node-config-input-rejectUnauthorized" style="width:auto">Verify server certificate</label>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-timeout">Timeout (ms)</label>
+    <input type="text" id="node-config-input-timeout" style="width:100px">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-metadataTtl">Metadata cache (s)</label>
+    <input type="text" id="node-config-input-metadataTtl" style="width:100px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="sap-connection">
+  <p>Connection to an SAP Gateway / S/4HANA / BTP ABAP system. One connection is one SAP session:
+  session cookies and the <code>X-CSRF-Token</code> are shared by all <code>sap-odata</code> nodes using it.</p>
+  <h3>Properties</h3>
+  <dl class="message-properties">
+    <dt>Host URL <span class="property-type">string</span></dt>
+    <dd>Protocol, host and port only, e.g. <code>https://my-sap:44300</code>. Service paths are configured on the <code>sap-odata</code> node.</dd>
+    <dt>SAP client <span class="property-type">string</span></dt>
+    <dd>Sent as <code>sap-client</code> query parameter on every request.</dd>
+    <dt>Language <span class="property-type">string</span></dt>
+    <dd>Sent as <code>sap-language</code> (texts and error messages).</dd>
+    <dt>Auth</dt>
+    <dd>Basic, OAuth2 client credentials (BTP / S/4HANA Cloud communication arrangements), Bearer token,
+      API Key (<code>APIKey</code> header for <code>sandbox.api.sap.com</code>), X.509 client certificate or none.</dd>
+  </dl>
+  <h3>Details</h3>
+  <p>Modifying requests fetch a CSRF token automatically (<code>GET</code> with <code>X-CSRF-Token: Fetch</code>) and refresh it once
+  when SAP answers <code>403</code> with <code>X-CSRF-Token: Required</code>.</p>
+</script>

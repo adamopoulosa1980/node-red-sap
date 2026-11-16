@@ -1,0 +1,314 @@
+<script type="text/javascript">
+  (function () {
+    var OPS_WITH_SET = ['query', 'get', 'count', 'create', 'update', 'delete'];
+
+    RED.nodes.registerType('sap-odata', {
+      category: 'SAP',
+      color: '#5DB4E9',
+      defaults: {
+        name: { value: '' },
+        connection: { value: '', type: 'sap-connection', required: true },
+        service: { value: '' },
+        version: { value: 'auto' },
+        operation: { value: 'query' },
+        entitySet: { value: '' },
+        key: { value: '' },
+        navigation: { value: '' },
+        filter: { value: '' },
+        select: { value: '' },
+        expand: { value: '' },
+        orderby: { value: '' },
+        top: { value: '' },
+        skip: { value: '' },
+        search: { value: '' },
+        count: { value: false },
+        custom: { value: '' },
+        fetchAll: { value: false },
+        maxPages: { value: 100 },
+        functionName: { value: '' },
+        bindingPath: { value: '' },
+        method: { value: '' },
+        path: { value: '' },
+        updateMethod: { value: 'auto' },
+        tunnel: { value: false },
+        etag: { value: 'auto' },
+        atomic: { value: true },
+        useMetadata: { value: true },
+        convertDates: { value: true },
+        stripMetadata: { value: false },
+      },
+      inputs: 1,
+      outputs: 1,
+      icon: 'db.svg',
+      paletteLabel: 'sap odata',
+      label: function () {
+        return this.name || (this.operation + (this.entitySet ? ' ' + this.entitySet : this.functionName ? ' ' + this.functionName : '')) || 'sap odata';
+      },
+      oneditprepare: function () {
+        var node = this;
+
+        function show() {
+          var op = $('#node-input-operation').val();
+          $('.sap-row-set').toggle(OPS_WITH_SET.indexOf(op) >= 0);
+          $('.sap-row-key').toggle(['get', 'update', 'delete', 'query', 'count'].indexOf(op) >= 0);
+          $('.sap-row-query').toggle(op === 'query' || op === 'get');
+          $('.sap-row-count').toggle(op === 'query' || op === 'count');
+          $('.sap-row-function').toggle(op === 'function');
+          $('.sap-row-request').toggle(op === 'request' || op === 'function');
+          $('.sap-row-request-path').toggle(op === 'request');
+          $('.sap-row-update').toggle(op === 'update');
+          $('.sap-row-etag').toggle(op === 'update' || op === 'delete');
+          $('.sap-row-batch').toggle(op === 'batch');
+          $('.sap-row-service').toggle(op !== 'catalog');
+        }
+        $('#node-input-operation').on('change', show);
+        show();
+
+        function connId() {
+          return $('#node-input-connection').val();
+        }
+
+        $('#sap-load-services').on('click', function () {
+          var id = connId();
+          if (!id || id === '_ADD_') return RED.notify('Select a deployed connection first', 'warning');
+          $.getJSON('sap-connection/' + id + '/services')
+            .done(function (r) {
+              var list = $('#sap-service-list').empty();
+              r.services.forEach(function (s) {
+                $('<option>').attr('value', s.path).text((s.description || s.title || '') + ' [' + s.version + ']').appendTo(list);
+              });
+              RED.notify(r.services.length + ' services loaded' + (r.errors.length ? ' (' + r.errors.map(function (e) { return e.catalog + ': ' + e.message; }).join('; ') + ')' : ''), r.services.length ? 'success' : 'warning');
+            })
+            .fail(function (x) {
+              RED.notify((x.responseJSON && x.responseJSON.error) || 'Failed to load services', 'error');
+            });
+        });
+
+        $('#sap-load-metadata').on('click', function () {
+          var id = connId();
+          var svc = $('#node-input-service').val();
+          if (!id || id === '_ADD_' || !svc) return RED.notify('Select a deployed connection and a service first', 'warning');
+          $.getJSON('sap-connection/' + id + '/metadata', { service: svc, refresh: 'true' })
+            .done(function (m) {
+              var sets = $('#sap-entityset-list').empty();
+              m.entitySets.forEach(function (s) {
+                $('<option>').attr('value', s.name).text((s.label || '') + ' key: ' + s.keys.map(function (k) { return k.name; }).join(',')).appendTo(sets);
+              });
+              var ops = $('#sap-function-list').empty();
+              m.operations.forEach(function (o) {
+                $('<option>').attr('value', o.id).text(o.kind + ' ' + o.httpMethod + (o.bound ? ' (bound)' : '')).appendTo(ops);
+              });
+              if (node.version === 'auto') $('#node-input-version').val('auto');
+              RED.notify('OData ' + m.version + ': ' + m.entitySets.length + ' entity sets, ' + m.operations.length + ' operations', 'success');
+            })
+            .fail(function (x) {
+              RED.notify((x.responseJSON && x.responseJSON.error) || 'Failed to load $metadata', 'error');
+            });
+        });
+      },
+    });
+  })();
+</script>
+
+<script type="text/html" data-template-name="sap-odata">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-connection"><i class="fa fa-server"></i> Connection</label>
+    <input type="text" id="node-input-connection">
+  </div>
+  <div class="form-row">
+    <label for="node-input-operation"><i class="fa fa-cog"></i> Operation</label>
+    <select id="node-input-operation">
+      <option value="query">Query (GET collection)</option>
+      <option value="get">Read entity (GET by key)</option>
+      <option value="count">Count ($count)</option>
+      <option value="create">Create (POST)</option>
+      <option value="update">Update (MERGE / PATCH / PUT)</option>
+      <option value="delete">Delete</option>
+      <option value="function">Function import / action</option>
+      <option value="batch">$batch</option>
+      <option value="metadata">$metadata</option>
+      <option value="catalog">Service catalog</option>
+      <option value="request">Raw request</option>
+    </select>
+  </div>
+  <div class="form-row sap-row-service">
+    <label for="node-input-service"><i class="fa fa-cube"></i> Service</label>
+    <input type="text" id="node-input-service" list="sap-service-list" style="width:55%" placeholder="API_BUSINESS_PARTNER or /sap/opu/odata4/...">
+    <datalist id="sap-service-list"></datalist>
+    <button type="button" class="red-ui-button" id="sap-load-services" title="Load from Gateway catalog"><i class="fa fa-search"></i></button>
+    <button type="button" class="red-ui-button" id="sap-load-metadata" title="Load $metadata"><i class="fa fa-sitemap"></i></button>
+  </div>
+  <div class="form-row sap-row-service">
+    <label for="node-input-version">OData version</label>
+    <select id="node-input-version" style="width:150px">
+      <option value="auto">auto (from path)</option>
+      <option value="v2">V2</option>
+      <option value="v4">V4</option>
+    </select>
+  </div>
+  <div class="form-row sap-row-set">
+    <label for="node-input-entitySet"><i class="fa fa-table"></i> Entity set</label>
+    <input type="text" id="node-input-entitySet" list="sap-entityset-list">
+    <datalist id="sap-entityset-list"></datalist>
+  </div>
+  <div class="form-row sap-row-key">
+    <label for="node-input-key"><i class="fa fa-key"></i> Key</label>
+    <input type="text" id="node-input-key" placeholder="1000 or BusinessPartner='1000' (or msg.key)">
+  </div>
+  <div class="form-row sap-row-key">
+    <label for="node-input-navigation">Navigation</label>
+    <input type="text" id="node-input-navigation" placeholder="to_BusinessPartnerAddress">
+  </div>
+  <div class="form-row sap-row-query sap-row-count">
+    <label for="node-input-filter">$filter</label>
+    <input type="text" id="node-input-filter" placeholder="Country eq 'GR'">
+  </div>
+  <div class="form-row sap-row-query">
+    <label for="node-input-select">$select</label>
+    <input type="text" id="node-input-select">
+  </div>
+  <div class="form-row sap-row-query">
+    <label for="node-input-expand">$expand</label>
+    <input type="text" id="node-input-expand">
+  </div>
+  <div class="form-row sap-row-query">
+    <label for="node-input-orderby">$orderby</label>
+    <input type="text" id="node-input-orderby">
+  </div>
+  <div class="form-row sap-row-query">
+    <label for="node-input-top">$top / $skip</label>
+    <input type="text" id="node-input-top" style="width:80px">
+    <input type="text" id="node-input-skip" style="width:80px">
+  </div>
+  <div class="form-row sap-row-query sap-row-count">
+    <label for="node-input-search">search</label>
+    <input type="text" id="node-input-search" placeholder="$search (V4) / search (SAP V2)">
+  </div>
+  <div class="form-row sap-row-query">
+    <label for="node-input-custom">Custom query</label>
+    <input type="text" id="node-input-custom" placeholder="sap-statistics=true&amp;$skiptoken=...">
+  </div>
+  <div class="form-row sap-row-query">
+    <label>&nbsp;</label>
+    <input type="checkbox" id="node-input-count" style="width:auto; margin:0">
+    <label for="node-input-count" style="width:auto">Inline count</label>
+    <input type="checkbox" id="node-input-fetchAll" style="width:auto; margin:0 0 0 20px">
+    <label for="node-input-fetchAll" style="width:auto">Follow next links (max pages</label>
+    <input type="text" id="node-input-maxPages" style="width:50px">)
+  </div>
+  <div class="form-row sap-row-function">
+    <label for="node-input-functionName"><i class="fa fa-bolt"></i> Function</label>
+    <input type="text" id="node-input-functionName" list="sap-function-list">
+    <datalist id="sap-function-list"></datalist>
+  </div>
+  <div class="form-row sap-row-function">
+    <label for="node-input-bindingPath">Bound to</label>
+    <input type="text" id="node-input-bindingPath" placeholder="EntitySet(key) - V4 bound operations">
+  </div>
+  <div class="form-row sap-row-request">
+    <label for="node-input-method">HTTP method</label>
+    <select id="node-input-method" style="width:120px">
+      <option value="">default</option>
+      <option value="GET">GET</option>
+      <option value="POST">POST</option>
+      <option value="PUT">PUT</option>
+      <option value="PATCH">PATCH</option>
+      <option value="MERGE">MERGE</option>
+      <option value="DELETE">DELETE</option>
+    </select>
+  </div>
+  <div class="form-row sap-row-request-path">
+    <label for="node-input-path">Path</label>
+    <input type="text" id="node-input-path" placeholder="relative to service, or /sap/...">
+  </div>
+  <div class="form-row sap-row-update">
+    <label for="node-input-updateMethod">Update verb</label>
+    <select id="node-input-updateMethod" style="width:200px">
+      <option value="auto">auto (V2 MERGE / V4 PATCH)</option>
+      <option value="MERGE">MERGE</option>
+      <option value="PATCH">PATCH</option>
+      <option value="PUT">PUT (full replace)</option>
+    </select>
+    <input type="checkbox" id="node-input-tunnel" style="width:auto; margin:0 0 0 10px">
+    <label for="node-input-tunnel" style="width:auto">MERGE via POST + X-HTTP-Method</label>
+  </div>
+  <div class="form-row sap-row-etag">
+    <label for="node-input-etag">ETag / If-Match</label>
+    <select id="node-input-etag" style="width:250px">
+      <option value="auto">auto (msg / payload / read first)</option>
+      <option value="msg">only msg.etag / payload</option>
+      <option value="wildcard">* (ignore concurrency)</option>
+      <option value="none">do not send</option>
+    </select>
+  </div>
+  <div class="form-row sap-row-batch">
+    <label>&nbsp;</label>
+    <input type="checkbox" id="node-input-atomic" style="width:auto; margin:0">
+    <label for="node-input-atomic" style="width:auto">Group consecutive changes in one change set (atomic)</label>
+  </div>
+  <div class="form-row">
+    <label>&nbsp;</label>
+    <input type="checkbox" id="node-input-useMetadata" style="width:auto; margin:0">
+    <label for="node-input-useMetadata" style="width:auto">Use $metadata for key/parameter types</label>
+  </div>
+  <div class="form-row">
+    <label>&nbsp;</label>
+    <input type="checkbox" id="node-input-convertDates" style="width:auto; margin:0">
+    <label for="node-input-convertDates" style="width:auto">Convert V2 /Date()/ to ISO</label>
+    <input type="checkbox" id="node-input-stripMetadata" style="width:auto; margin:0 0 0 20px">
+    <label for="node-input-stripMetadata" style="width:auto">Strip __metadata / @odata.*</label>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="sap-odata">
+  <p>Calls an SAP Gateway OData V2 or V4 service: CRUD, queries, function imports / actions, <code>$count</code>,
+  <code>$batch</code>, <code>$metadata</code> and the Gateway service catalog. CSRF tokens, session cookies, ETags and
+  literal formatting are handled automatically.</p>
+
+  <h3>Inputs (all optional, override the node settings)</h3>
+  <dl class="message-properties">
+    <dt>operation <span class="property-type">string</span></dt>
+    <dd><code>query | get | count | create | update | delete | function | batch | metadata | catalog | request</code></dd>
+    <dt>service <span class="property-type">string</span></dt>
+    <dd>Service name (V2, e.g. <code>API_BUSINESS_PARTNER</code>, <code>ZMY_SRV;v=0002</code>) or full path (<code>/sap/opu/odata4/...</code>).</dd>
+    <dt>entitySet, navigation <span class="property-type">string</span></dt>
+    <dt>key <span class="property-type">string | number | object</span></dt>
+    <dd><code>"1000"</code>, <code>{SalesOrder:"1", SalesOrderItem:"10"}</code> or a raw predicate <code>"SalesOrder='1'"</code>.
+      With <i>Use $metadata</i> the literals are typed (guid, datetime, decimal, Int64 ...).</dd>
+    <dt>query <span class="property-type">object</span></dt>
+    <dd><code>{filter, select, expand, orderby, top, skip, search, count, ...custom}</code>.</dd>
+    <dt>payload <span class="property-type">object | array</span></dt>
+    <dd>Body for create / update / V4 action, function parameters, or the request list for <code>batch</code>.</dd>
+    <dt>params <span class="property-type">object</span></dt>
+    <dd>Function import / action parameters.</dd>
+    <dt>etag <span class="property-type">string</span></dt>
+    <dd>Sent as <code>If-Match</code> on update/delete.</dd>
+    <dt>headers <span class="property-type">object</span></dt>
+    <dd>Extra request headers (e.g. <code>Prefer</code>, <code>sap-contextid-accept</code>).</dd>
+    <dt>method, path</dt>
+    <dd>For <code>request</code>: any verb and path (e.g. <code>A_Doc('1')/$value</code>, <code>$links</code>).</dd>
+    <dt>fetchAll <span class="property-type">boolean</span></dt>
+    <dd>Follow <code>__next</code> / <code>@odata.nextLink</code>.</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload</dt>
+    <dd>Entity, array of entities, count, function result, or an array of <code>{status, ok, headers, body, data}</code> for batch.</dd>
+    <dt>odata <span class="property-type">object</span></dt>
+    <dd><code>{operation, version, service, statusCode, count, nextLink, etag, url, ...}</code></dd>
+  </dl>
+  <p>Errors are thrown (use a <i>catch</i> node); <code>msg.error</code> contains the SAP message, code and <code>errordetails</code>.</p>
+
+  <h3>$batch</h3>
+  <pre>msg.payload = [
+  { method: "GET", url: "A_BusinessPartner('1')" },
+  { method: "POST", entitySet: "A_BusinessPartner", body: {...} },
+  { method: "PATCH", entitySet: "A_BusinessPartner", key: "2", body: {...}, headers: {"If-Match": "*"} }
+]</pre>
+  <p>Consecutive modifying requests are placed in one change set (atomic) unless disabled or overridden with a <code>changeset</code> label per request.</p>
+</script>

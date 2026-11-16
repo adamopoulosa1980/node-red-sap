@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+*.log
+# secrets - never commit
+sap-api-key-sandbox.txt
+*.key.txt
+.env
