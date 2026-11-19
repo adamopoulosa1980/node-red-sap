@@ -4,4 +4,4 @@ Do not edit by hand: run `tracking check`. One row per item; details live in the
 
 | id | status | priority | title | links |
 |---|---|---|---|---|
-| [FEAT-001](features/FEAT-001-node-red-sap-keeps-a-register-of-its-work-on-tracking-kit.md) | in-progress | P2 | node-red-sap keeps a register of its work on tracking-kit | — |
+| [FEAT-001](features/FEAT-001-node-red-sap-keeps-a-register-of-its-work-on-tracking-kit.md) | done | — | node-red-sap keeps a register of its work on tracking-kit | — |

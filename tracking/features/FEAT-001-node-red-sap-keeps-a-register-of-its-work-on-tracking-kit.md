@@ -1,9 +1,10 @@
 ---
 id: FEAT-001
 title: node-red-sap keeps a register of its work on tracking-kit
-status: in-progress
-priority: P2
+status: done
 opened: 2026-11-20
+closed: 2026-11-20
+commits: 1f6ca4c, 9f716eb, 8662c2f
 ---
 
 ## What
@@ -19,3 +20,9 @@ for.
 - `tracking check` ends with `✓` on the machine.
 - The workflow `tracking` runs `tracking check --check` green on GitHub.
 - The project is on the page, backlog.assert.gr.
+
+## Done
+
+2026-11-20. `tracking check` ends with `✓`; the workflow `tracking` ran
+green (run 44641172083, tracking-kit 0.4.1); the page lists the project
+and its CI runs.
