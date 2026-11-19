@@ -154,7 +154,16 @@ The credential files are git-ignored.
 - Browser-based SAML 2.0 single sign-on (redirect to an IdP login page) cannot work for unattended flows; use the OAuth 2.0 SAML bearer grant, X.509 or Kerberos instead
 - NTLM is supported for proxies (SAP's ICM does not offer NTLM)
 
-Example flow: `examples/sandbox-business-partner.json` (Import → Examples in Node-RED).
+## Examples
+
+Import → Examples → *node-red-contrib-sap-odata* in Node-RED:
+
+| Flow | System | What it shows |
+|---|---|---|
+| `sap-trial-travel-agency` | an [ABAP Cloud Developer Trial](https://hub.docker.com/r/sapse/abap-cloud-developer-trial) (`http://localhost:50000`, client 001, user `DEVELOPER`) | a travel agency on OData V4: list planned travels, create one, book it (bound action with ETag), change it, read it with its bookings, delete it; and the EPM sales orders waiting for confirmation (OData V2) |
+| `sandbox-business-partner` | `sandbox.api.sap.com` (API key) | S/4HANA Cloud business partners: query, read with ``, `` |
+
+Open the connection node after the import and enter the password (or API key): credentials are never part of an exported flow.
 
 ## About the maintainer
 
