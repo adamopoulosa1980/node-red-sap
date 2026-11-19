@@ -4,6 +4,7 @@ title: node-red-sap keeps a register of its work on tracking-kit
 status: done
 opened: 2026-11-20
 closed: 2026-11-20
+witness: .github/workflows/tracking.yml, CI run 44641172083
 commits: 1f6ca4c, 9f716eb, 8662c2f
 ---
 
