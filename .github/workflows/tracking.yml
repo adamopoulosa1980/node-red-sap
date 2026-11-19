@@ -1,0 +1,23 @@
+name: tracking
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tracking-kit (pinned)
+        env:
+          KEY: ${{ secrets.TRACKING_KIT_DEPLOY_KEY }}
+        run: |
+          test -n "$KEY" || { echo "::error::secret TRACKING_KIT_DEPLOY_KEY is not set"; exit 1; }
+          key="$RUNNER_TEMP/tracking_kit_key"
+          printf '%s\n' "$KEY" > "$key"
+          chmod 600 "$key"
+          GIT_SSH_COMMAND="ssh -i '$key' -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            python -m pip install "tracking-kit @ git+ssh://git@github.com/adamopoulosa1980/tracking-kit.git@v0.4"
+          rm -f "$key"
+      - name: Check the register
+        run: tracking check --check
